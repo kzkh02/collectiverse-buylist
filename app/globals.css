@@ -1881,6 +1881,26 @@ img {
   }
 }
 
+@media (max-width: 820px) {
+  .home-hero {
+    grid-template-columns: 1fr !important;
+    text-align: center;
+  }
+
+  .whatnot-panel {
+    grid-column: 1 / -1;
+    justify-self: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    width: min(100%, 360px) !important;
+    max-width: 360px !important;
+  }
+
+  .hero-copy {
+    justify-self: center;
+  }
+}
+
 
 /* SETS PAGINATION */
 .set-pagination {
