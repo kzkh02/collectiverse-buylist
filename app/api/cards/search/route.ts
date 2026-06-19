@@ -7,7 +7,7 @@ function cleanSearch(value: string) {
     .trim()
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
-    .replace(/[^a-zA-Z0-9\s\-]/g, ' ')
+    .replace(/[^a-zA-Z0-9\s\-\/]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -17,35 +17,55 @@ function unique<T>(items: T[]) {
 }
 
 function buildQueries(search: string) {
+  const cleaned = search.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()
+
   const terms = unique(
-    search
+    cleaned
       .split(' ')
       .map((term) => term.trim())
       .filter((term) => term.length > 0)
   )
 
-  const compact = search.replace(/\s+/g, '')
+  const compact = cleaned.replace(/\s+/g, '')
+  const firstTerm = terms[0] || cleaned
+  const isNumberSearch = /^[a-zA-Z0-9\-\/]+$/.test(search)
 
-  const queries = [
-    `name:"${search}"`,
-    terms.map((term) => `name:*${term}*`).join(' '),
-    `number:"${search}"`,
+  const numberQueries = [
     `number:${search}`,
+    `number:"${search}"`,
+    `number:${cleaned}`,
+    `number:"${cleaned}"`,
+    `number:${firstTerm}`,
+    `number:"${firstTerm}"`,
   ]
 
-  if (compact && compact !== search) {
-    queries.push(`number:${compact}`)
-    queries.push(`name:*${compact}*`)
+  if (/^\d+$/.test(firstTerm)) {
+    numberQueries.push(`nationalPokedexNumbers:${firstTerm}`)
   }
 
-  return unique(queries.filter(Boolean))
+  const nameQueries = [
+    `name:"${cleaned}"`,
+    terms.map((term) => `name:*${term}*`).join(' '),
+  ]
+
+  if (compact && compact !== cleaned) {
+    numberQueries.push(`number:${compact}`)
+    numberQueries.push(`number:"${compact}"`)
+    nameQueries.push(`name:*${compact}*`)
+  }
+
+  return unique(
+    isNumberSearch
+      ? [...numberQueries, ...nameQueries]
+      : [...nameQueries, ...numberQueries]
+  ).filter(Boolean)
 }
 
 async function fetchPokemonCards(apiQuery: string) {
   const params = new URLSearchParams({
     q: apiQuery,
     orderBy: '-set.releaseDate',
-    select: 'id,name,number,set,images,rarity,cardmarket,tcgplayer',
+    select: 'id,name,number,set,images,rarity,cardmarket,tcgplayer,nationalPokedexNumbers',
     pageSize: '80',
   })
 
