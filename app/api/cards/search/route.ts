@@ -10,12 +10,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url =
-      'https://api.pokemontcg.io/v2/cards' +
-      `?q=name:*${encodeURIComponent(query)}*` +
-      '&orderBy=-set.releaseDate' +
-      '&select=id,name,number,set,images,rarity,cardmarket,tcgplayer' +
-      '&pageSize=80'
+   const safeQuery = query
+  .trim()
+  .replace(/["'():/\\]/g, ' ')
+  .replace(/\s+/g, ' ')
+
+const url =
+  'https://api.pokemontcg.io/v2/cards' +
+  '?q=name:*' + encodeURIComponent(safeQuery) + '*' +
+  '&orderBy=-set.releaseDate' +
+  '&select=id,name,number,set,images,rarity,cardmarket,tcgplayer' +
+  '&pageSize=80'
 
     const response = await fetch(url, {
       headers: {
