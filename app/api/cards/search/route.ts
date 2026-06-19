@@ -2,64 +2,122 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+function cleanSearch(value: string) {
+  return value
+    .trim()
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[^a-zA-Z0-9\s\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function unique<T>(items: T[]) {
+  return Array.from(new Set(items))
+}
+
+function buildQueries(search: string) {
+  const terms = unique(
+    search
+      .split(' ')
+      .map((term) => term.trim())
+      .filter((term) => term.length > 0)
+  )
+
+  const compact = search.replace(/\s+/g, '')
+
+  const queries = [
+    `name:"${search}"`,
+    terms.map((term) => `name:*${term}*`).join(' '),
+    `number:"${search}"`,
+    `number:${search}`,
+  ]
+
+  if (compact && compact !== search) {
+    queries.push(`number:${compact}`)
+    queries.push(`name:*${compact}*`)
+  }
+
+  return unique(queries.filter(Boolean))
+}
+
+async function fetchPokemonCards(apiQuery: string) {
+  const params = new URLSearchParams({
+    q: apiQuery,
+    orderBy: '-set.releaseDate',
+    select: 'id,name,number,set,images,rarity,cardmarket,tcgplayer',
+    pageSize: '80',
+  })
+
+  const response = await fetch(
+    `https://api.pokemontcg.io/v2/cards?${params.toString()}`,
+    {
+      headers: {
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    }
+  )
+
+  if (!response.ok) {
+    return []
+  }
+
+  const json = await response.json()
+
+  return json.data || []
+}
+
 export async function GET(request: NextRequest) {
-  const query = request.nextUrl.searchParams.get('q')?.trim() || ''
+  const rawQuery = request.nextUrl.searchParams.get('q') || ''
+  const query = cleanSearch(rawQuery)
 
   if (query.length < 2) {
     return NextResponse.json([])
   }
 
   try {
-   const safeQuery = query
-  .trim()
-  .replace(/"/g, '')
+    const apiQueries = buildQueries(query)
+    const seen = new Set<string>()
+    const cards: any[] = []
 
-const searchQuery = [
-  `name:*${safeQuery}*`,
-  `number:*${safeQuery}*`,
-].join(' OR ')
+    for (const apiQuery of apiQueries) {
+      const results = await fetchPokemonCards(apiQuery)
 
-const url =
-  'https://api.pokemontcg.io/v2/cards' +
-  '?q=' + encodeURIComponent(searchQuery) +
-  '&orderBy=-set.releaseDate' +
-  '&select=id,name,number,set,images,rarity,cardmarket,tcgplayer' +
-  '&pageSize=80'
+      for (const card of results) {
+        if (!seen.has(card.id)) {
+          seen.add(card.id)
+          cards.push(card)
+        }
+      }
 
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    })
-
-    if (!response.ok) {
-      return new NextResponse(`Pokemon TCG API error: ${response.status}`, { status: 502 })
+      if (cards.length >= 80) {
+        break
+      }
     }
 
-    const json = await response.json()
+    const mappedCards = cards.slice(0, 80).map((card: any) => ({
+      id: card.id,
+      source: 'pokemon-tcg-api',
+      language: 'en',
+      name: card.name,
+      setName: card.set?.name || '',
+      number: card.number || '',
+      imageUrl: card.images?.large || card.images?.small || '',
+      rarity: card.rarity || '',
 
-    const cards = (json.data || []).map((card: any) => ({
-  id: card.id,
-  source: 'pokemon-tcg-api',
-  language: 'en',
-  name: card.name,
-  setName: card.set?.name || '',
-  number: card.number || '',
-  imageUrl: card.images?.large || card.images?.small || '',
-  rarity: card.rarity || '',
+      cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
 
-  cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
+      tcgplayerPrice:
+        card.tcgplayer?.prices?.holofoil?.market ||
+        card.tcgplayer?.prices?.reverseHolofoil?.market ||
+        card.tcgplayer?.prices?.normal?.market ||
+        null,
+    }))
 
-  tcgplayerPrice:
-    card.tcgplayer?.prices?.holofoil?.market ||
-    card.tcgplayer?.prices?.reverseHolofoil?.market ||
-    card.tcgplayer?.prices?.normal?.market ||
-    null,
-}))
-
-    return NextResponse.json(cards)
+    return NextResponse.json(mappedCards)
   } catch (error: any) {
-    return new NextResponse(error?.message || 'Failed to search cards', { status: 500 })
+    console.error('Card search failed:', error)
+    return NextResponse.json([])
   }
 }
