@@ -35,6 +35,7 @@ type CheckoutPhoto = {
 
 const conditions = ['Near Mint', 'Excellent', 'Good', 'Played', 'Damaged', 'Unsure']
 const paymentMethods = ['Bank Transfer']
+const SETS_PER_PAGE = 60
 
 
 function makeUid() {
@@ -84,6 +85,7 @@ export default function SellPage() {
   const [results, setResults] = useState<SearchCard[]>([])
   const [sets, setSets] = useState<CardSet[]>([])
   const [setSearch, setSetSearch] = useState('')
+  const [setPage, setSetPage] = useState(1)
   const [selectedSetId, setSelectedSetId] = useState('')
   const [setCards, setSetCards] = useState<SearchCard[]>([])
   const [featuredPage, setFeaturedPage] = useState(1)
@@ -102,7 +104,6 @@ export default function SellPage() {
   const [customerMessage, setCustomerMessage] = useState('')
   const [photos, setPhotos] = useState<Record<string, CheckoutPhoto>>({})
   const [checkoutOpen, setCheckoutOpen] = useState(false)
-  const [basketOpen, setBasketOpen] = useState(false)
 
   const [message, setMessage] = useState('')
   const [searching, setSearching] = useState(false)
@@ -128,16 +129,25 @@ export default function SellPage() {
     })
   }, [email, password, confirmPassword, paymentDetails, cart, photos, loading])
 
-  const filteredSets = sets
-    .filter((set) => {
-      const search = setSearch.toLowerCase().trim()
-      if (!search) return true
-      return `${set.name} ${set.series || ''}`.toLowerCase().includes(search)
-    })
-    .slice(0, 60)
-	
+  const filteredSets = sets.filter((set) => {
+    const search = setSearch.toLowerCase().trim()
+    if (!search) return true
+    return `${set.name} ${set.series || ''}`.toLowerCase().includes(search)
+  })
 
-	
+  const totalSetPages = Math.max(1, Math.ceil(filteredSets.length / SETS_PER_PAGE))
+
+  const visibleSets = filteredSets.slice(
+    (setPage - 1) * SETS_PER_PAGE,
+    setPage * SETS_PER_PAGE
+  )
+
+  useEffect(() => {
+    setSetPage(1)
+  }, [setSearch])
+
+
+
   async function loadFeaturedCards(page = 1) {
     try {
       const response = await fetch(`/api/cards/featured?page=${page}`)
@@ -251,7 +261,6 @@ export default function SellPage() {
     })
 
     setMessage(`${card.name} added to your basket.`)
-    setBasketOpen(true)
   }
 
   function addRequestCard() {
@@ -285,7 +294,6 @@ export default function SellPage() {
     setRequestNumber('')
     setRequestQty(1)
     setMessage('Request card added to your basket. Front and back photos will be required at checkout.')
-    setBasketOpen(true)
   }
 
   function updateCartCard(uid: string, patch: Partial<CartCard>) {
@@ -477,23 +485,6 @@ export default function SellPage() {
     <>
       <SiteHeader active="sell" cartCount={cartCount} />
 
-      <button
-        type="button"
-        className="mobile-basket-toggle"
-        onClick={() => setBasketOpen(true)}
-      >
-        🛒 Basket {cartCount > 0 ? `(${cartCount})` : ''}
-      </button>
-
-      {basketOpen && (
-        <button
-          type="button"
-          className="basket-overlay"
-          aria-label="Close basket"
-          onClick={() => setBasketOpen(false)}
-        />
-      )}
-
       <main className="sell-shell">
         <div className="sell-main">
           {submittedId ? (
@@ -579,8 +570,35 @@ export default function SellPage() {
                     placeholder="Search English set name..."
                   />
 
+                  <div className="set-pagination">
+                    <p>
+                      Showing {filteredSets.length === 0 ? 0 : (setPage - 1) * SETS_PER_PAGE + 1}–
+                      {Math.min(setPage * SETS_PER_PAGE, filteredSets.length)} of {filteredSets.length} English sets
+                    </p>
+
+                    <div>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={setPage <= 1}
+                        onClick={() => setSetPage((page) => Math.max(1, page - 1))}
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={setPage >= totalSetPages}
+                        onClick={() => setSetPage((page) => Math.min(totalSetPages, page + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="set-grid">
-                    {filteredSets.map((set) => (
+                    {visibleSets.map((set) => (
                       <button
                         key={set.id}
                         className={`set-card ${selectedSetId === set.id ? 'active' : ''}`}
@@ -711,15 +729,7 @@ export default function SellPage() {
           )}
         </div>
 
-        <aside className={`side-basket ${basketOpen ? 'basket-open' : ''}`}>
-          <button
-            type="button"
-            className="basket-close"
-            onClick={() => setBasketOpen(false)}
-          >
-            ×
-          </button>
-
+        <aside className="side-basket">
           <div className="basket-header">
             <div>
               <h2>Basket</h2>
