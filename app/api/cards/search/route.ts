@@ -16,49 +16,74 @@ function unique<T>(items: T[]) {
   return Array.from(new Set(items))
 }
 
-function buildQueries(search: string) {
-  const cleaned = search.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()
+function splitSearch(search: string) {
+  const parts = search
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
 
-  const terms = unique(
-    cleaned
-      .split(' ')
-      .map((term) => term.trim())
-      .filter((term) => term.length > 0)
+  const numberParts = parts.filter((part) =>
+    /^\d+[a-zA-Z]?([\/-]\d+[a-zA-Z]?)?$/.test(part)
   )
 
-  const compact = cleaned.replace(/\s+/g, '')
-  const firstTerm = terms[0] || cleaned
-  const isNumberSearch = /^[a-zA-Z0-9\-\/]+$/.test(search)
+  const nameParts = parts.filter(
+    (part) =>
+      !/^\d+[a-zA-Z]?([\/-]\d+[a-zA-Z]?)?$/.test(part)
+  )
 
-  const numberQueries = [
-    `number:${search}`,
-    `number:"${search}"`,
-    `number:${cleaned}`,
-    `number:"${cleaned}"`,
-    `number:${firstTerm}`,
-    `number:"${firstTerm}"`,
-  ]
+  const firstCardNumber =
+    numberParts[0]?.split(/[\/-]/)[0]?.trim() || ''
 
-  if (/^\d+$/.test(firstTerm)) {
-    numberQueries.push(`nationalPokedexNumbers:${firstTerm}`)
+  return {
+    parts,
+    nameParts,
+    numberParts,
+    firstCardNumber,
+    compact: search.replace(/\s+/g, ''),
+  }
+}
+
+function buildQueries(search: string) {
+  const { parts, nameParts, firstCardNumber, compact } = splitSearch(search)
+
+  const nameSearch = nameParts.join(' ').trim()
+  const nameWildcard = nameParts
+    .map((part) => `name:*${part}*`)
+    .join(' ')
+
+  const queries: string[] = []
+
+  // Example: "charizard 199/165" -> name:*charizard* number:199
+  if (nameWildcard && firstCardNumber) {
+    queries.push(`${nameWildcard} number:${firstCardNumber}`)
+    queries.push(`${nameWildcard} number:"${firstCardNumber}"`)
   }
 
-  const nameQueries = [
-    `name:"${cleaned}"`,
-    terms.map((term) => `name:*${term}*`).join(' '),
-  ]
-
-  if (compact && compact !== cleaned) {
-    numberQueries.push(`number:${compact}`)
-    numberQueries.push(`number:"${compact}"`)
-    nameQueries.push(`name:*${compact}*`)
+  // Example: "charizard" / "rampardos gl"
+  if (nameSearch) {
+    queries.push(`name:"${nameSearch}"`)
+    queries.push(nameWildcard)
   }
 
-  return unique(
-    isNumberSearch
-      ? [...numberQueries, ...nameQueries]
-      : [...nameQueries, ...numberQueries]
-  ).filter(Boolean)
+  // Example: "199", "199/165", "TG01", "GG44", "SVP001"
+  if (firstCardNumber) {
+    queries.push(`number:${firstCardNumber}`)
+    queries.push(`number:"${firstCardNumber}"`)
+    queries.push(`number:*${firstCardNumber}*`)
+  }
+
+  if (compact && compact !== search) {
+    queries.push(`number:${compact}`)
+    queries.push(`number:*${compact}*`)
+    queries.push(`name:*${compact}*`)
+  }
+
+  // Fallback for mixed or unusual searches
+  if (parts.length > 0) {
+    queries.push(parts.map((part) => `name:*${part}*`).join(' '))
+  }
+
+  return unique(queries.filter(Boolean))
 }
 
 async function fetchPokemonCards(apiQuery: string) {
@@ -88,6 +113,32 @@ async function fetchPokemonCards(apiQuery: string) {
   return json.data || []
 }
 
+function scoreCard(card: any, search: string) {
+  const normalisedSearch = search.toLowerCase()
+  const { nameParts, firstCardNumber } = splitSearch(search)
+
+  let score = 0
+
+  const cardName = String(card.name || '').toLowerCase()
+  const cardNumber = String(card.number || '').toLowerCase()
+
+  for (const part of nameParts) {
+    if (cardName.includes(part.toLowerCase())) {
+      score += 20
+    }
+  }
+
+  if (firstCardNumber && cardNumber === firstCardNumber.toLowerCase()) {
+    score += 50
+  }
+
+  if (cardName === normalisedSearch) {
+    score += 100
+  }
+
+  return score
+}
+
 export async function GET(request: NextRequest) {
   const rawQuery = request.nextUrl.searchParams.get('q') || ''
   const query = cleanSearch(rawQuery)
@@ -111,12 +162,16 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (cards.length >= 80) {
+      if (cards.length >= 120) {
         break
       }
     }
 
-    const mappedCards = cards.slice(0, 80).map((card: any) => ({
+    const sortedCards = cards
+      .sort((a, b) => scoreCard(b, query) - scoreCard(a, query))
+      .slice(0, 80)
+
+    const mappedCards = sortedCards.map((card: any) => ({
       id: card.id,
       source: 'pokemon-tcg-api',
       language: 'en',
