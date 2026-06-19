@@ -94,16 +94,11 @@ export async function POST(request: Request) {
     }
 
     if (!payload.payment_details?.trim()) {
-      return NextResponse.json(
-        {
-          error:
-            payload.payment_method === 'PayPal'
-              ? 'PayPal email address is required.'
-              : 'Bank details are required.',
-        },
-        { status: 400 }
-      )
-    }
+  return NextResponse.json(
+    { error: 'Bank details are required.' },
+    { status: 400 }
+  )
+}
 
     if (!payload.cards || payload.cards.length === 0) {
       return NextResponse.json(
