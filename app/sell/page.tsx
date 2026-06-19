@@ -102,6 +102,7 @@ export default function SellPage() {
   const [customerMessage, setCustomerMessage] = useState('')
   const [photos, setPhotos] = useState<Record<string, CheckoutPhoto>>({})
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [basketOpen, setBasketOpen] = useState(false)
 
   const [message, setMessage] = useState('')
   const [searching, setSearching] = useState(false)
@@ -250,6 +251,7 @@ export default function SellPage() {
     })
 
     setMessage(`${card.name} added to your basket.`)
+    setBasketOpen(true)
   }
 
   function addRequestCard() {
@@ -283,6 +285,7 @@ export default function SellPage() {
     setRequestNumber('')
     setRequestQty(1)
     setMessage('Request card added to your basket. Front and back photos will be required at checkout.')
+    setBasketOpen(true)
   }
 
   function updateCartCard(uid: string, patch: Partial<CartCard>) {
@@ -332,16 +335,7 @@ export default function SellPage() {
     }
 
     if (!paymentDetails.trim()) {
-      setMessage(
-        paymentMethod === 'PayPal'
-          ? 'Enter your PayPal email address.'
-          : 'Enter your bank transfer details.'
-      )
-      return
-    }
-
-    if (paymentMethod === 'PayPal' && !paymentDetails.trim().includes('@')) {
-      setMessage('Enter a valid PayPal email address.')
+      setMessage('Enter your bank transfer details.')
       return
     }
 
@@ -482,6 +476,23 @@ export default function SellPage() {
   return (
     <>
       <SiteHeader active="sell" cartCount={cartCount} />
+
+      <button
+        type="button"
+        className="mobile-basket-toggle"
+        onClick={() => setBasketOpen(true)}
+      >
+        🛒 Basket {cartCount > 0 ? `(${cartCount})` : ''}
+      </button>
+
+      {basketOpen && (
+        <button
+          type="button"
+          className="basket-overlay"
+          aria-label="Close basket"
+          onClick={() => setBasketOpen(false)}
+        />
+      )}
 
       <main className="sell-shell">
         <div className="sell-main">
@@ -700,7 +711,15 @@ export default function SellPage() {
           )}
         </div>
 
-        <aside className="side-basket">
+        <aside className={`side-basket ${basketOpen ? 'basket-open' : ''}`}>
+          <button
+            type="button"
+            className="basket-close"
+            onClick={() => setBasketOpen(false)}
+          >
+            ×
+          </button>
+
           <div className="basket-header">
             <div>
               <h2>Basket</h2>
@@ -828,9 +847,7 @@ export default function SellPage() {
                     </div>
 
                     <div>
-                      <label className="label">
-                        'Bank Details'
-                      </label>
+                      <label className="label">Bank Details</label>
                       <textarea
                         className="textarea"
                         value={paymentDetails}
