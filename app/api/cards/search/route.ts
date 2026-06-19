@@ -12,12 +12,16 @@ export async function GET(request: NextRequest) {
   try {
    const safeQuery = query
   .trim()
-  .replace(/["'():/\\]/g, ' ')
-  .replace(/\s+/g, ' ')
+  .replace(/"/g, '')
+
+const searchQuery = [
+  `name:*${safeQuery}*`,
+  `number:*${safeQuery}*`,
+].join(' OR ')
 
 const url =
   'https://api.pokemontcg.io/v2/cards' +
-  '?q=name:*' + encodeURIComponent(safeQuery) + '*' +
+  '?q=' + encodeURIComponent(searchQuery) +
   '&orderBy=-set.releaseDate' +
   '&select=id,name,number,set,images,rarity,cardmarket,tcgplayer' +
   '&pageSize=80'
