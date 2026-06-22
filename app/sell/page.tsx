@@ -83,19 +83,35 @@ function paymentDetailsPlaceholder() {
 async function compressImage(file: File): Promise<File> {
   if (!file.type.startsWith('image/')) return file
 
-  const imageBitmap = await createImageBitmap(file)
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = reject
+
+    reader.readAsDataURL(file)
+  })
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+
+    img.onload = () => resolve(img)
+    img.onerror = reject
+
+    img.src = dataUrl
+  })
 
   const maxSize = 1400
-  const scale = Math.min(1, maxSize / Math.max(imageBitmap.width, imageBitmap.height))
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
 
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(imageBitmap.width * scale)
-  canvas.height = Math.round(imageBitmap.height * scale)
+  canvas.width = Math.round(image.width * scale)
+  canvas.height = Math.round(image.height * scale)
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return file
 
-  ctx.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height)
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, 'image/jpeg', 0.72)
@@ -107,7 +123,6 @@ async function compressImage(file: File): Promise<File> {
     type: 'image/jpeg',
   })
 }
-
 
 export default function SellPage() {
   const [mode, setMode] = useState<'search' | 'sets' | 'request'>('search')
@@ -134,6 +149,7 @@ export default function SellPage() {
   const [customerMessage, setCustomerMessage] = useState('')
   const [photos, setPhotos] = useState<Record<string, CheckoutPhoto>>({})
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [basketOpen, setBasketOpen] = useState(false)
 
   const [message, setMessage] = useState('')
   const [searching, setSearching] = useState(false)
@@ -291,6 +307,7 @@ export default function SellPage() {
     })
 
     setMessage(`${card.name} added to your basket.`)
+    setBasketOpen(true)
   }
 
   function addRequestCard() {
@@ -324,6 +341,7 @@ export default function SellPage() {
     setRequestNumber('')
     setRequestQty(1)
     setMessage('Request card added to your basket. Front and back photos will be required at checkout.')
+    setBasketOpen(true)
   }
 
   function updateCartCard(uid: string, patch: Partial<CartCard>) {
@@ -533,6 +551,23 @@ export default function SellPage() {
   return (
     <>
       <SiteHeader active="sell" cartCount={cartCount} />
+
+      <button
+        type="button"
+        className="mobile-basket-toggle"
+        onClick={() => setBasketOpen(true)}
+      >
+        🛒 Basket {cartCount > 0 ? `(${cartCount})` : ''}
+      </button>
+
+      {basketOpen && (
+        <button
+          type="button"
+          className="basket-overlay"
+          aria-label="Close basket"
+          onClick={() => setBasketOpen(false)}
+        />
+      )}
 
       <main className="sell-shell">
         <div className="sell-main">
@@ -778,7 +813,15 @@ export default function SellPage() {
           )}
         </div>
 
-        <aside className="side-basket">
+        <aside className={`side-basket ${basketOpen ? 'basket-open' : ''}`}>
+          <button
+            type="button"
+            className="basket-close"
+            onClick={() => setBasketOpen(false)}
+          >
+            ×
+          </button>
+
           <div className="basket-header">
             <div>
               <h2>Basket</h2>
@@ -938,10 +981,20 @@ export default function SellPage() {
                         </strong>
 
                         <label className="label">Front</label>
-                        <input type="file" accept="image/*" onChange={(event) => updatePhoto(card.uid, 'front', event.target.files?.[0] || null)} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(event) => updatePhoto(card.uid, 'front', event.target.files?.[0] || null)}
+                        />
 
                         <label className="label">Back</label>
-                        <input type="file" accept="image/*" onChange={(event) => updatePhoto(card.uid, 'back', event.target.files?.[0] || null)} />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(event) => updatePhoto(card.uid, 'back', event.target.files?.[0] || null)}
+                        />
                       </div>
                     ))}
                   </div>
