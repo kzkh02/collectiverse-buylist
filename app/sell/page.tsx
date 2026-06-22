@@ -79,6 +79,36 @@ function paymentDetailsPlaceholder() {
   return 'Account name:\nSort code:\nAccount number:'
 }
 
+
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return file
+
+  const imageBitmap = await createImageBitmap(file)
+
+  const maxSize = 1400
+  const scale = Math.min(1, maxSize / Math.max(imageBitmap.width, imageBitmap.height))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(imageBitmap.width * scale)
+  canvas.height = Math.round(imageBitmap.height * scale)
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return file
+
+  ctx.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height)
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, 'image/jpeg', 0.72)
+  )
+
+  if (!blob) return file
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+    type: 'image/jpeg',
+  })
+}
+
+
 export default function SellPage() {
   const [mode, setMode] = useState<'search' | 'sets' | 'request'>('search')
   const [query, setQuery] = useState('')
@@ -315,15 +345,34 @@ export default function SellPage() {
     setCheckoutOpen(false)
   }
 
-  function updatePhoto(uid: string, side: 'front' | 'back', file: File | null) {
-    setPhotos((current) => ({
-      ...current,
-      [uid]: {
-        front: current[uid]?.front || null,
-        back: current[uid]?.back || null,
-        [side]: file,
-      },
-    }))
+  async function updatePhoto(uid: string, side: 'front' | 'back', file: File | null) {
+    if (!file) {
+      setPhotos((current) => ({
+        ...current,
+        [uid]: {
+          front: current[uid]?.front || null,
+          back: current[uid]?.back || null,
+          [side]: null,
+        },
+      }))
+      return
+    }
+
+    try {
+      setMessage('Optimising photo...')
+      const optimisedFile = await compressImage(file)
+
+      setPhotos((current) => ({
+        ...current,
+        [uid]: {
+          front: current[uid]?.front || null,
+          back: current[uid]?.back || null,
+          [side]: optimisedFile,
+        },
+      }))
+    } finally {
+      setMessage('')
+    }
   }
 
   async function submitCollection() {
