@@ -28,13 +28,14 @@ export async function GET(request: Request) {
     const apiPage = getMixedApiPage(displayPage)
 
     const response = await fetch(
-      `https://api.pokemontcg.io/v2/cards?page=${apiPage}&pageSize=${PAGE_SIZE}`,
+      `https://api.pokemontcg.io/v2/cards?page=${apiPage}&pageSize=${PAGE_SIZE}&select=id,name,number,set,images,rarity`,
       {
-        headers: process.env.POKEMON_TCG_API_KEY
-          ? {
-              'X-Api-Key': process.env.POKEMON_TCG_API_KEY,
-            }
-          : {},
+        headers: {
+          Accept: 'application/json',
+          ...(process.env.POKEMON_TCG_API_KEY
+            ? { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY }
+            : {}),
+        },
         next: { revalidate: 3600 },
       }
     )

@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+type PokemonApiCard = {
+  id: string
+  name: string
+  number?: string
+  set?: {
+    id?: string
+    name?: string
+    series?: string
+  }
+  images?: {
+    small?: string
+    large?: string
+  }
+  rarity?: string
+  cardmarket?: {
+    prices?: {
+      trendPrice?: number
+    }
+  }
+  tcgplayer?: {
+    prices?: {
+      holofoil?: { market?: number }
+      reverseHolofoil?: { market?: number }
+      normal?: { market?: number }
+      '1stEditionHolofoil'?: { market?: number }
+      '1stEditionNormal'?: { market?: number }
+    }
+  }
+}
+
 function cleanSearch(value: string) {
   return value
     .trim()
@@ -32,7 +62,7 @@ function splitSearch(search: string) {
   )
 
   const firstCardNumber =
-    numberParts[0]?.split(/[\/-]/)[0]?.trim() || ''
+    numberParts[0]?.split(/[\/-]/)[0]?.replace(/^0+/, '')?.trim() || ''
 
   return {
     parts,
@@ -43,6 +73,28 @@ function splitSearch(search: string) {
   }
 }
 
+function promoCodeQueries(search: string) {
+  const compact = search.replace(/[\s\-\/]/g, '').toLowerCase()
+  const match = compact.match(/^([a-z]{2,5})(\d{1,4})$/)
+
+  if (!match) return []
+
+  const prefix = match[1]
+  const number = String(Number(match[2]))
+
+  const possibleSetIds = unique([
+    prefix,
+    `${prefix}p`,
+    prefix.replace(/p$/, ''),
+  ])
+
+  return possibleSetIds.flatMap((setId) => [
+    `set.id:${setId} number:${number}`,
+    `set.id:${setId} number:"${number}"`,
+    `set.id:${setId} number:*${number}*`,
+  ])
+}
+
 function buildQueries(search: string) {
   const { parts, nameParts, firstCardNumber, compact } = splitSearch(search)
 
@@ -51,18 +103,35 @@ function buildQueries(search: string) {
     .map((part) => `name:*${part}*`)
     .join(' ')
 
+  const setWildcard = parts
+    .map((part) => `set.name:*${part}*`)
+    .join(' ')
+
   const queries: string[] = []
+
+  queries.push(...promoCodeQueries(search))
 
   // Example: "charizard 199/165" -> name:*charizard* number:199
   if (nameWildcard && firstCardNumber) {
     queries.push(`${nameWildcard} number:${firstCardNumber}`)
     queries.push(`${nameWildcard} number:"${firstCardNumber}"`)
+    queries.push(`${nameWildcard} number:*${firstCardNumber}*`)
+  }
+
+  // Example: "scarlet violet promo charizard" -> set.name:*promo* name:*charizard*
+  if (nameWildcard && setWildcard && /promo|promos|black|star|scarlet|violet|sword|shield|sun|moon|xy|mega/i.test(search)) {
+    queries.push(`${nameWildcard} ${setWildcard}`)
   }
 
   // Example: "charizard" / "rampardos gl"
   if (nameSearch) {
     queries.push(`name:"${nameSearch}"`)
     queries.push(nameWildcard)
+  }
+
+  // Example: "mega evolution promos" / "scarlet violet promos"
+  if (setWildcard) {
+    queries.push(setWildcard)
   }
 
   // Example: "199", "199/165", "TG01", "GG44", "SVP001"
@@ -76,9 +145,10 @@ function buildQueries(search: string) {
     queries.push(`number:${compact}`)
     queries.push(`number:*${compact}*`)
     queries.push(`name:*${compact}*`)
+    queries.push(`set.name:*${compact}*`)
   }
 
-  // Fallback for mixed or unusual searches
+  // Fallback for mixed or unusual searches.
   if (parts.length > 0) {
     queries.push(parts.map((part) => `name:*${part}*`).join(' '))
   }
@@ -91,7 +161,7 @@ async function fetchPokemonCards(apiQuery: string) {
     q: apiQuery,
     orderBy: '-set.releaseDate',
     select: 'id,name,number,set,images,rarity,cardmarket,tcgplayer,nationalPokedexNumbers',
-    pageSize: '80',
+    pageSize: '120',
   })
 
   const response = await fetch(
@@ -99,6 +169,9 @@ async function fetchPokemonCards(apiQuery: string) {
     {
       headers: {
         Accept: 'application/json',
+        ...(process.env.POKEMON_TCG_API_KEY
+          ? { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY }
+          : {}),
       },
       cache: 'no-store',
     }
@@ -113,7 +186,7 @@ async function fetchPokemonCards(apiQuery: string) {
   return json.data || []
 }
 
-function scoreCard(card: any, search: string) {
+function scoreCard(card: PokemonApiCard, search: string) {
   const normalisedSearch = search.toLowerCase()
   const { nameParts, firstCardNumber } = splitSearch(search)
 
@@ -121,22 +194,55 @@ function scoreCard(card: any, search: string) {
 
   const cardName = String(card.name || '').toLowerCase()
   const cardNumber = String(card.number || '').toLowerCase()
+  const setName = String(card.set?.name || '').toLowerCase()
+  const setId = String(card.set?.id || '').toLowerCase()
 
   for (const part of nameParts) {
-    if (cardName.includes(part.toLowerCase())) {
-      score += 20
-    }
+    const lowered = part.toLowerCase()
+
+    if (cardName.includes(lowered)) score += 25
+    if (setName.includes(lowered)) score += 15
+    if (setId.includes(lowered)) score += 15
   }
 
   if (firstCardNumber && cardNumber === firstCardNumber.toLowerCase()) {
-    score += 50
+    score += 60
   }
 
   if (cardName === normalisedSearch) {
     score += 100
   }
 
+  if (/promo|promos|svp|swshp|smp|xyp|bwp|basep/i.test(search)) {
+    if (setName.includes('promo') || setId.endsWith('p') || setId.includes('svp')) {
+      score += 35
+    }
+  }
+
   return score
+}
+
+function mapCard(card: PokemonApiCard) {
+  return {
+    id: card.id,
+    source: 'pokemon-tcg-api',
+    language: 'en',
+    name: card.name,
+    setName: card.set?.name || '',
+    number: card.number || '',
+    imageUrl: card.images?.large || card.images?.small || '',
+    rarity: card.rarity || '',
+
+    cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
+
+    tcgplayerPrice:
+      card.tcgplayer?.prices?.holofoil?.market ||
+      card.tcgplayer?.prices?.reverseHolofoil?.market ||
+      card.tcgplayer?.prices?.normal?.market ||
+      card.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
+      card.tcgplayer?.prices?.['1stEditionNormal']?.market ||
+      null,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -150,7 +256,7 @@ export async function GET(request: NextRequest) {
   try {
     const apiQueries = buildQueries(query)
     const seen = new Set<string>()
-    const cards: any[] = []
+    const cards: PokemonApiCard[] = []
 
     for (const apiQuery of apiQueries) {
       const results = await fetchPokemonCards(apiQuery)
@@ -162,35 +268,16 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (cards.length >= 120) {
+      if (cards.length >= 160) {
         break
       }
     }
 
     const sortedCards = cards
       .sort((a, b) => scoreCard(b, query) - scoreCard(a, query))
-      .slice(0, 80)
+      .slice(0, 120)
 
-    const mappedCards = sortedCards.map((card: any) => ({
-      id: card.id,
-      source: 'pokemon-tcg-api',
-      language: 'en',
-      name: card.name,
-      setName: card.set?.name || '',
-      number: card.number || '',
-      imageUrl: card.images?.large || card.images?.small || '',
-      rarity: card.rarity || '',
-
-      cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
-
-      tcgplayerPrice:
-        card.tcgplayer?.prices?.holofoil?.market ||
-        card.tcgplayer?.prices?.reverseHolofoil?.market ||
-        card.tcgplayer?.prices?.normal?.market ||
-        null,
-    }))
-
-    return NextResponse.json(mappedCards)
+    return NextResponse.json(sortedCards.map(mapCard))
   } catch (error: any) {
     console.error('Card search failed:', error)
     return NextResponse.json([])
