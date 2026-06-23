@@ -239,8 +239,13 @@ useEffect(() => {
     if (!selectedSubmission) return
 
     const offerTotal = selectedCards.reduce((sum, card) => {
-      if (card.review_status !== 'accepted') return sum
-      return sum + Number(card.offer_amount || 0)
+      const amount = Number(card.offer_amount || 0)
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return sum
+      }
+
+      return sum + amount
     }, 0)
 
     await updateSubmission({
@@ -249,7 +254,7 @@ useEffect(() => {
       updated_at: new Date().toISOString(),
     })
 
-    setMessage(`Submission marked as ${statusLabel(status)}.`)
+    setMessage(`Submission marked as ${statusLabel(status)} with total ${money(offerTotal)}.`)
   }
 
   function submissionLink() {
@@ -267,7 +272,7 @@ useEffect(() => {
       ? ` ${selectedSubmission.customer_name}`
       : ''
 
-    const total = money(selectedSubmission.offer_total || totals.offer)
+    const total = money(totals.offer || selectedSubmission.offer_total)
     const link = submissionLink()
 
     switch (status) {
@@ -567,9 +572,11 @@ useEffect(() => {
     className="primary-btn"
     href={mailto}
     onClick={() => {
-      if (selectedSubmission?.status === 'pending_review') {
-        saveOfferTotalAndStatus('offer_sent')
-      }
+      saveOfferTotalAndStatus(
+        selectedSubmission?.status === 'pending_review'
+          ? 'offer_sent'
+          : selectedSubmission?.status || 'offer_sent'
+      )
     }}
   >
     Generate Email
