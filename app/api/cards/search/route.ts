@@ -18,7 +18,6 @@ type PokemonApiCard = {
   rarity?: string
   cardmarket?: {
     prices?: {
-      averageSellPrice?: number
       trendPrice?: number
     }
   }
@@ -223,33 +222,6 @@ function scoreCard(card: PokemonApiCard, search: string) {
   return score
 }
 
-const BUY_RATE = 0.65
-const EUR_TO_GBP = 0.85
-
-function getCardmarketPrice(card: PokemonApiCard) {
-  const cardmarketPrice =
-    Number(card.cardmarket?.prices?.averageSellPrice || 0) ||
-    Number(card.cardmarket?.prices?.trendPrice || 0)
-
-  if (!cardmarketPrice || !Number.isFinite(cardmarketPrice)) {
-    return null
-  }
-
-  return cardmarketPrice
-}
-
-function calculateBuyPrice(card: PokemonApiCard) {
-  const cardmarketPrice = getCardmarketPrice(card)
-
-  if (!cardmarketPrice) {
-    return null
-  }
-
-  const gbpMarketPrice = cardmarketPrice * EUR_TO_GBP
-
-  return Math.round(gbpMarketPrice * BUY_RATE * 100) / 100
-}
-
 function mapCard(card: PokemonApiCard) {
   return {
     id: card.id,
@@ -261,9 +233,7 @@ function mapCard(card: PokemonApiCard) {
     imageUrl: card.images?.large || card.images?.small || '',
     rarity: card.rarity || '',
 
-    cardmarketPrice: getCardmarketPrice(card),
-    buyPrice: calculateBuyPrice(card),
-
+    cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
     tcgplayerPrice:
       card.tcgplayer?.prices?.holofoil?.market ||
       card.tcgplayer?.prices?.reverseHolofoil?.market ||

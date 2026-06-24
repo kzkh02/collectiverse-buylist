@@ -28,9 +28,6 @@ export type SearchCard = {
   rarity?: string
   finish?: CardFinish
   baseCardId?: string
-  cardmarketPrice?: number | null
-  tcgplayerPrice?: number | null
-  buyPrice?: number | null
 }
 
 export const requestLanguageOptions = [

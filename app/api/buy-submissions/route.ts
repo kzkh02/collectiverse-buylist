@@ -23,7 +23,6 @@ type PayloadCard = {
   condition?: string
   finish?: string
   condition_note?: string
-  estimated_offer?: number
 }
 
 function isManualCard(card: PayloadCard) {
@@ -213,7 +212,6 @@ export async function POST(request: Request) {
         condition: card.condition || 'Near Mint',
         condition_note: card.condition_note || null,
         review_status: 'accepted',
-        offer_amount: Number(card.estimated_offer || 0),
       })
 
       if (cardResult.error) {
