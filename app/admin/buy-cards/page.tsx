@@ -463,7 +463,7 @@ useEffect(() => {
           <div className="admin-top">
             <div>
               <h1>Buylist Admin</h1>
-              <p>Review submissions, price cards, send offers and update customer status.</p>
+              <p>Review submissions, check auto-filled buy prices, send offers and update customer status.</p>
             </div>
 
             <div>

@@ -26,6 +26,8 @@ type CartCard = {
   condition: string
   finish: string
   condition_note: string
+  buy_price?: number
+  estimated_offer?: number
 }
 
 type CheckoutPhoto = {
@@ -58,6 +60,8 @@ function getDisplayRarity(rarity?: string) {
 }
 
 function toCartCard(card: SearchCard, quantity: number, condition: string): CartCard {
+  const buyPrice = getCardBuyPrice(card)
+
   return {
     uid: makeUid(),
     tcg_id: card.id,
@@ -71,6 +75,8 @@ function toCartCard(card: SearchCard, quantity: number, condition: string): Cart
     condition,
     finish: (card as any).finish || (card as any).rarity || 'Normal',
     condition_note: '',
+    buy_price: buyPrice,
+    estimated_offer: getLineOffer(buyPrice, quantity),
   }
 }
 
@@ -78,6 +84,23 @@ function toCartCard(card: SearchCard, quantity: number, condition: string): Cart
 function paymentDetailsPlaceholder() {
   return 'Account name:\nSort code:\nAccount number:'
 }
+
+function money(value: any) {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+  }).format(Number(value || 0))
+}
+
+function getCardBuyPrice(card: SearchCard) {
+  return Number((card as any).buyPrice || 0)
+}
+
+function getLineOffer(unitPrice: number, quantity: number) {
+  if (!unitPrice || !Number.isFinite(unitPrice)) return 0
+  return Math.round(unitPrice * Math.max(1, quantity) * 100) / 100
+}
+
 
 
 async function compressImage(file: File): Promise<File> {
@@ -164,6 +187,7 @@ export default function SellPage() {
   const [requestQty, setRequestQty] = useState(1)
 
   const cartCount = cart.reduce((sum, card) => sum + card.quantity, 0)
+  const estimatedBasketTotal = cart.reduce((sum, card) => sum + Number(card.estimated_offer || 0), 0)
 
   const canCheckout = useMemo(() => {
     if (!email.trim().includes('@') || password.length < 6 || password !== confirmPassword || !paymentDetails.trim() || cart.length === 0 || loading) return false
@@ -292,9 +316,16 @@ export default function SellPage() {
       )
 
       if (existing) {
-        return current.map((item) =>
-          item.uid === existing.uid ? { ...item, quantity: item.quantity + quantity } : item
-        )
+        return current.map((item) => {
+          if (item.uid !== existing.uid) return item
+
+          const nextQuantity = item.quantity + quantity
+          return {
+            ...item,
+            quantity: nextQuantity,
+            estimated_offer: getLineOffer(Number(item.buy_price || 0), nextQuantity),
+          }
+        })
       }
 
       return [
@@ -333,6 +364,8 @@ export default function SellPage() {
         condition: requestCondition,
         finish: 'Normal',
         condition_note: '',
+        buy_price: 0,
+        estimated_offer: 0,
       },
     ])
 
@@ -346,6 +379,22 @@ export default function SellPage() {
 
   function updateCartCard(uid: string, patch: Partial<CartCard>) {
     setCart((current) => current.map((card) => (card.uid === uid ? { ...card, ...patch } : card)))
+  }
+
+  function updateCartQuantity(uid: string, quantity: number) {
+    const safeQuantity = Math.max(1, quantity)
+
+    setCart((current) =>
+      current.map((card) =>
+        card.uid === uid
+          ? {
+              ...card,
+              quantity: safeQuantity,
+              estimated_offer: getLineOffer(Number(card.buy_price || 0), safeQuantity),
+            }
+          : card
+      )
+    )
   }
 
   function removeCartCard(uid: string) {
@@ -443,6 +492,7 @@ export default function SellPage() {
           condition: card.condition,
           finish: card.finish,
           condition_note: card.condition_note,
+          estimated_offer: Number(card.estimated_offer || 0),
         })),
       }
 
@@ -507,6 +557,11 @@ export default function SellPage() {
                 {card.setName || 'Unknown set'}
               </p>
  <p className="muted-small">English Pokémon card</p>
+              {getCardBuyPrice(card) > 0 ? (
+                <p className="buy-price-line">We'll Pay {money(getCardBuyPrice(card))}</p>
+              ) : (
+                <p className="buy-price-line manual">Manual Review</p>
+              )}
               <select
                 className="condition-select"
                 value={getCondition(card)}
@@ -826,6 +881,9 @@ export default function SellPage() {
             <div>
               <h2>Basket</h2>
               <p>{cartCount === 1 ? '1 card added' : `${cartCount} cards added`}</p>
+              {estimatedBasketTotal > 0 && (
+                <p><strong>Estimated Offer: {money(estimatedBasketTotal)}</strong></p>
+              )}
             </div>
             {cart.length > 0 && (
               <button className="text-btn" onClick={clearCart}>
@@ -854,6 +912,11 @@ export default function SellPage() {
                       {card.set_name || 'Manual request'}
                     </span>
                     <span>{card.finish}</span>
+                    {Number(card.estimated_offer || 0) > 0 ? (
+                      <span><strong>We'll Pay {money(card.estimated_offer)}</strong></span>
+                    ) : (
+                      <span><strong>Manual Review</strong></span>
+                    )}
 
                     <select
                       className="basket-select"
@@ -869,9 +932,9 @@ export default function SellPage() {
 
                     <div className="basket-controls">
                       <div className="qty-micro">
-                        <button onClick={() => updateCartCard(card.uid, { quantity: Math.max(1, card.quantity - 1) })}>-</button>
+                        <button onClick={() => updateCartQuantity(card.uid, card.quantity - 1)}>-</button>
                         <span>{card.quantity}</span>
-                        <button onClick={() => updateCartCard(card.uid, { quantity: card.quantity + 1 })}>+</button>
+                        <button onClick={() => updateCartQuantity(card.uid, card.quantity + 1)}>+</button>
                       </div>
 
                       <button className="remove-btn" onClick={() => removeCartCard(card.uid)}>
@@ -968,6 +1031,14 @@ export default function SellPage() {
                       />
                     </div>
                   </div>
+
+                  {estimatedBasketTotal > 0 && (
+                    <div className="estimated-offer-box">
+                      <span>Estimated Offer</span>
+                      <strong>{money(estimatedBasketTotal)}</strong>
+                      <p>Final offer may vary after condition verification.</p>
+                    </div>
+                  )}
 
                   <div className="photos-section">
                     <h4>Photos</h4>

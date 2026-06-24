@@ -222,6 +222,27 @@ function scoreCard(card: PokemonApiCard, search: string) {
   return score
 }
 
+const BUY_RATE = 0.65
+
+function calculateBuyPrice(card: PokemonApiCard) {
+  const marketPrice =
+    Number(card.cardmarket?.prices?.trendPrice || 0) ||
+    Number(
+      card.tcgplayer?.prices?.holofoil?.market ||
+      card.tcgplayer?.prices?.reverseHolofoil?.market ||
+      card.tcgplayer?.prices?.normal?.market ||
+      card.tcgplayer?.prices?.['1stEditionHolofoil']?.market ||
+      card.tcgplayer?.prices?.['1stEditionNormal']?.market ||
+      0
+    )
+
+  if (!marketPrice || !Number.isFinite(marketPrice)) {
+    return null
+  }
+
+  return Math.round(marketPrice * BUY_RATE * 100) / 100
+}
+
 function mapCard(card: PokemonApiCard) {
   return {
     id: card.id,
@@ -234,6 +255,7 @@ function mapCard(card: PokemonApiCard) {
     rarity: card.rarity || '',
 
     cardmarketPrice: card.cardmarket?.prices?.trendPrice || null,
+    buyPrice: calculateBuyPrice(card),
 
     tcgplayerPrice:
       card.tcgplayer?.prices?.holofoil?.market ||
