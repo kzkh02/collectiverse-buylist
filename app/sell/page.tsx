@@ -150,6 +150,7 @@ export default function SellPage() {
   const [photos, setPhotos] = useState<Record<string, CheckoutPhoto>>({})
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [basketOpen, setBasketOpen] = useState(false)
+  const [restoredBasket, setRestoredBasket] = useState(false)
 
   const [message, setMessage] = useState('')
   const [searching, setSearching] = useState(false)
@@ -193,6 +194,31 @@ export default function SellPage() {
   }, [setSearch])
 
 
+
+  useEffect(() => {
+    const saved = localStorage.getItem('collectiverse_sell_state')
+    if (saved) {
+      try {
+        const s = JSON.parse(saved)
+        if (s.cart) setCart(s.cart)
+        if (s.email) setEmail(s.email)
+        if (s.password) setPassword(s.password)
+        if (s.confirmPassword) setConfirmPassword(s.confirmPassword)
+        if (s.name) setName(s.name)
+        if (s.paymentMethod) setPaymentMethod(s.paymentMethod)
+        if (s.paymentDetails) setPaymentDetails(s.paymentDetails)
+        if (s.customerMessage) setCustomerMessage(s.customerMessage)
+        if (s.checkoutOpen) setCheckoutOpen(s.checkoutOpen)
+        if (s.cart?.length) setRestoredBasket(true)
+      } catch {}
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('collectiverse_sell_state', JSON.stringify({
+      cart,email,password,confirmPassword,name,paymentMethod,paymentDetails,customerMessage,checkoutOpen
+    }))
+  }, [cart,email,password,confirmPassword,name,paymentMethod,paymentDetails,customerMessage,checkoutOpen])
 
   async function loadFeaturedCards(page = 1) {
     try {
@@ -361,6 +387,8 @@ export default function SellPage() {
     setCart([])
     setPhotos({})
     setCheckoutOpen(false)
+    localStorage.removeItem('collectiverse_sell_state')
+    setRestoredBasket(false)
   }
 
   async function updatePhoto(uid: string, side: 'front' | 'back', file: File | null) {
@@ -583,6 +611,7 @@ export default function SellPage() {
             </section>
           ) : (
             <>
+              {restoredBasket && (<section className="message-line"><strong>🛒 Welcome back!</strong> We restored your basket. <button className="secondary-btn" onClick={()=>setRestoredBasket(false)}>Continue</button> <button className="secondary-btn" onClick={clearCart}>Start Fresh</button></section>)}
               <section className="sell-heading">
                 <div>
                   <h1>Sell Cards</h1>

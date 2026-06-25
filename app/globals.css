@@ -128,13 +128,28 @@ img {
 
 @media (max-width: 900px) {
   .home-hero {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 32px;
+    align-items: center;
   }
 
+  .hero-copy {
+    width: 100%;
+    text-align: center;
+  }
+
+  .hero-actions {
+    justify-content: center;
+  }
+
+  .hero-panel,
   .whatnot-panel {
+    width: 100%;
     max-width: 420px;
-    justify-self: start;
+    margin: 0 auto;
+    justify-self: center;
+    align-self: center;
   }
 
   .process-section {
@@ -1979,5 +1994,45 @@ img {
 
   .side-basket {
     transform: none !important;
+  }
+}
+
+
+/* FINAL MOBILE HOMEPAGE WHATNOT FIX */
+@media (max-width: 560px) {
+  .home-hero {
+    padding-top: 32px;
+    align-items: center !important;
+    overflow-x: hidden;
+  }
+
+  .hero-copy {
+    text-align: center;
+  }
+
+  .hero-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hero-actions .primary-btn,
+  .hero-actions .secondary-btn {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .whatnot-panel,
+  .hero-panel.whatnot-panel {
+    width: 100% !important;
+    max-width: 420px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    justify-self: center !important;
+    align-self: center !important;
+  }
+
+  .whatnot-btn {
+    width: 100%;
   }
 }
